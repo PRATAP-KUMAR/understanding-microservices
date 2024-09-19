@@ -20,7 +20,7 @@ def token_required(f):
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             current_user_id = data['user_id']
         except DecodeError:
-            return jsonify({'error': 'Authorization toke is invalid'}), 401
+            return jsonify({'error': 'Authorization token is invalid'}), 401
         return f(current_user_id, *args, **kwargs)
     return decorated
 
