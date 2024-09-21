@@ -1,15 +1,18 @@
 import requests
 from flask import Flask, jsonify, request, make_response
+from flask_cors import CORS, cross_origin
 import jwt
 from functools import wraps
 import json
 import os
-from jwt.exceptions import DecodeError
+from jwt.exceptions import InvalidTokenError  # Use the correct exception
 
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['SECRET_KEY'] = os.urandom(24)
-port = int(os.environ.get('PORT', 5000))
 
+# Token required decorator
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -19,14 +22,18 @@ def token_required(f):
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             current_user_id = data['user_id']
-        except DecodeError:
+        except InvalidTokenError:
             return jsonify({'error': 'Authorization token is invalid'}), 401
         return f(current_user_id, *args, **kwargs)
     return decorated
 
+# Load users
 with open('users.json', 'r') as f:
     users = json.load(f)
+
+# Authentication route
 @app.route('/auth', methods=['POST'])
+@cross_origin()
 def authenticate_user():
     if request.headers['Content-Type'] != 'application/json':
         return jsonify({'error': 'Unsupported Media Type'}), 415
@@ -37,20 +44,21 @@ def authenticate_user():
             token = jwt.encode({'user_id': user['id']}, app.config['SECRET_KEY'], algorithm="HS256")
             response = make_response(jsonify({'message': 'Authentication successful'}))
             response.set_cookie('token', token)
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
             return response, 200
-        return jsonify({'error': 'Invalid username or password'}), 401
+    return jsonify({'error': 'Invalid username or password'}), 401
 
+# Home route
 @app.route("/")
 def home():
     return "Hello, this is a Flask Microservice"
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=port)
 
+# Products route
 BASE_URL = "https://dummyjson.com"
 @app.route('/products', methods=['GET'])
+@cross_origin()
 @token_required
 def get_products(current_user_id):
-    headers = {'Authorization': f'Bearer {request.cookies.get("token")}'}
     response = requests.get(f"{BASE_URL}/products")
     if response.status_code != 200:
         return jsonify({'error': response.json()['message']}), response.status_code
@@ -59,9 +67,12 @@ def get_products(current_user_id):
         product_data = {
             'id': product['id'],
             'title': product['title'],
-            # 'brand': product['brand'],
             'price': product['price'],
             'description': product['description']
         }
         products.append(product_data)
     return jsonify({'data': products}), 200 if products else 204
+
+# Run the app
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

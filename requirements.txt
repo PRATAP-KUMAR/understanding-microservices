@@ -1,4 +1,4 @@
 flask
 requests
 pyjwt
-gunicorn==20.1.*
+flask_cors
